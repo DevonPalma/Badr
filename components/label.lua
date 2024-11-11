@@ -1,28 +1,40 @@
-local component = require 'badr'
+local LowerClass = require 'lib.LowerClass'
+local component = require 'lib.Badr.badr'
 
-local function label(options)
-    local _font = options.font or love.graphics.getFont()
-    local color = options.color or { 0, 0, 0 }
+---@class Label : Badr
+local Label = LowerClass('Label', component)
 
-    return component {
-        text = options.text or options,
-        visible = options.visible or true,
-        id = options.id,
-        --
-        width = _font:getWidth(options.text or options),
-        height = _font:getHeight(options.text or options),
-        onClick = options.onClick or nil,
-        font = _font,
-        draw = function(self)
-            if not self.visible then return end
-            love.graphics.setFont(self.font)
-            love.graphics.setColor({
-                color[1], color[2], color[3], options.opacity
-            })
-            love.graphics.print(self.text, self.x, self.y)
-            love.graphics.setColor({ 1, 1, 1 })
-        end,
-    }
+function Label:__init(t)
+	-- If a string is passed, convert it to a table
+	if type(t) == 'string' then t = { text = t } end
+
+	component.__init(self, {
+		font = love.graphics.getFont(),
+		-- Styles
+		opacity = 1,
+		color = { 0, 0, 0 },
+		-- Logic
+		text = t.text or t,
+		visible = t.visible or true,
+		id = t.id,
+	})
+	self:include(t)
 end
 
-return label
+function Label:updatePosition(x, y)
+	component.updatePosition(self, x, y)
+	self.width = self.font:getWidth(self.text)
+	self.height = self.font:getHeight(self.text)
+end
+
+function Label:draw()
+	if not self.visible then return end
+	love.graphics.setFont(self.font)
+	love.graphics.setColor({
+		self.color[1], self.color[2], self.color[3], self.opacity
+	})
+	love.graphics.print(self.text, self.x, self.y)
+	love.graphics.setColor({ 1, 1, 1 })
+end
+
+return Label

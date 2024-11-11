@@ -6,133 +6,152 @@
 -- This library is free software; you can redistribute it and/or modify it
 -- under the terms of the MIT license. See LICENSE for details.
 --
-local badr = {}
-badr.__index = badr
 
-function badr:new(t)
-    t = t or {}
-    local _default = {
-        x = 0,
-        y = 0,
-        height = 0,
-        width = 0,
-        parent = { x = 0, y = 0, visible = true },
-        id = tostring(love.timer.getTime()),
-        visible = true,
-        children = {},
-    }
-    for key, value in pairs(t) do
-        _default[key] = value
-    end
-    return setmetatable(_default, badr)
+local LowerClass = require 'lib.LowerClass'
+local TreeMixin = require 'lib.LowerClass.mixins.TreeMixin'
+
+---@class Badr : Class, TreeMixin
+---@field new fun(self: Badr, t: table): Badr
+---@field x number
+---@field y number
+---@field height number
+---@field width number
+---@field parent TreeMixin
+---@field id string
+---@field visible boolean
+---@field children TreeMixin[]
+local Badr = LowerClass:new("Badr", TreeMixin)
+
+function Badr:__init(t)
+	--- Generate default values
+	self:include({
+		x = 0,
+		y = 0,
+		height = 0,
+		width = 0,
+		parent = nil,
+		id = tostring(love.timer.getTime()),
+		visible = true,
+		children = {},
+	})
+
+	-- Mixin the table above
+	self:include(t)
 end
 
-function badr.__add(self, component)
-    if type(component) ~= "table" or component == nil then return end
+-- ---------------------- Adding / Subtracting Children --------------------- --
 
-    component.parent = self
-    component.x = self.x + component.x
-    component.y = self.y + component.y
+function Badr:add(child, index)
+	if not LowerClass.is(child, Badr) then return self end
 
-    local childrenSize = { width = 0, hight = 0 }
-    for _, child in ipairs(self.children) do
-        childrenSize.width = childrenSize.width + child.width;
-        childrenSize.hight = childrenSize.hight + child.height
-    end
+	self:addChild(child, index)
 
-    local gap = self.gap or 0
-    local lastChild = self.children[#self.children] or {}
-
-    if self.column then
-        component.y = (lastChild.height or 0) + (lastChild.y or self.y)
-        if #self.children > 0 then
-            component.y = component.y + gap
-        end
-        self.height = math.max(self.height, childrenSize.hight + component.height + gap * #self.children)
-        self.width = math.max(self.width, component.width)
-    end
-    if self.row then
-        component.x = (lastChild.width or 0) + (lastChild.x or self.x)
-        if #self.children > 0 then
-            component.x = component.x + gap
-        end
-        self.width = math.max(self.width, childrenSize.width + component.width + gap * #self.children)
-        self.height = math.max(self.height, component.height)
-    end
-
-    if #component.children > 0 then
-        for _, child in ipairs(component.children) do
-            child:updatePosition(component.x, component.y)
-        end
-    end
-    table.insert(self.children, component)
-    return self
+	self:updatePosition(self.x, self.y)
+	return self
 end
 
--- Remove child
-function badr.__sub(self, component)
-    if self % component.id then
-        for index, child in ipairs(self.children) do
-            if child.id == component.id then
-                table.remove(self.children, index)
-            end
-        end
-    end
-    return self
+Badr.__add = Badr.add
+
+
+function Badr:sub(component)
+	if not LowerClass.is(component, Badr) then return self end
+
+	self:removeChild(component)
+
+	self:updatePosition(self.x, self.y)
+
+	return self
 end
+
+Badr.__sub = Badr.sub
+
+---Ensures a component has it's position updated
+---@param x any
+---@param y any
+function Badr:updatePosition(x, y)
+	-- Update this component's position
+	self.x = x
+	self.y = y
+
+	local offsetX, offsetY = x, y -- Track positions for placing children
+
+	-- Iterate over children, placing them based on layout
+	for _, child in ipairs(self.children) do
+		if self.column then
+			-- Place child vertically, updating offsetY by child height + gap
+			child:updatePosition(offsetX, offsetY)
+			offsetY = offsetY + child.height + (self.gap or 0)
+			-- Update Badr's height to accommodate all children
+			self.height = offsetY - y
+		elseif self.row then
+			-- Place child horizontally, updating offsetX by child width + gap
+			child:updatePosition(offsetX, offsetY)
+			offsetX = offsetX + child.width + (self.gap or 0)
+			-- Update Badr's width to accommodate all children
+			self.width = offsetX - x
+		end
+	end
+end
+
+-- --------------------------------- Utility -------------------------------- --
 
 -- Returns child with specific id
-function badr.__mod(self, id)
-    assert(type(id) == "string", 'Badar; Provided id must be a string.')
-    for _, child in ipairs(self.children) do
-        if child.id == id then
-            return child
-        end
-    end
+function Badr:getChild(id)
+	assert(type(id) == "string", 'Badar; Provided id must be a string.')
+	if self.id == id then
+		return self
+	end
+
+	for _, child in ipairs(self.children) do
+		local found = child:getChild(id)
+		if found then
+			return found
+		end
+	end
 end
 
-function badr:isMouseInside()
-    local mouseX, mouseY = love.mouse.getPosition()
-    return mouseX >= self.x and mouseX <= self.x + self.width and
-        mouseY >= self.y and
-        mouseY <= self.y + self.height
+Badr.__mod = Badr.getChild
+
+function Badr:isInside(x, y)
+	return x >= self.x and x <= self.x + self.width and
+		y >= self.y and
+		y <= self.y + self.height
 end
 
-function badr:draw()
-    if not self.visible then return end;
-    if #self.children > 0 then
-        for _, child in ipairs(self.children) do
-            child:draw()
-        end
-    end
+function Badr:animate(props)
+	props(self)
+	for _, child in ipairs(self.children) do
+		child:animate(props)
+	end
 end
 
-function badr:updatePosition(x, y)
-    self.x = self.x + x
-    self.y = self.y + y
-    for _, child in ipairs(self.children) do
-        child:updatePosition(x, y)
-    end
+function Badr:draw()
+	if not self.visible then return end;
+	if #self.children > 0 then
+		for _, child in ipairs(self.children) do
+			child:draw()
+		end
+	end
 end
 
-function badr:animate(props)
-    props(self)
-    for _, child in ipairs(self.children) do
-        child:animate(props)
-    end
+function Badr:update()
+	if self.onUpdate then
+		self:onUpdate()
+	end
+	for _, child in ipairs(self.children) do
+		child:update()
+	end
 end
 
-function badr:update()
-    if self.onUpdate then
-        self:onUpdate()
-    end
-    for _, child in ipairs(self.children) do
-        child:update()
-    end
+function Badr:propegateEvent(eventName, ...)
+	for _, child in ipairs(self.children) do
+		if child:propegateEvent(eventName, ...) then
+			return true
+		end
+	end
+	if self[eventName] then
+		return self[eventName](self, ...)
+	end
 end
 
-return setmetatable({ new = badr.new }, {
-    __call = function(t, ...)
-        return badr:new(...)
-    end,
-})
+return Badr
