@@ -41,29 +41,29 @@ end
 
 -- ---------------------- Adding / Subtracting Children --------------------- --
 
-function Badr:add(child, index)
+function Badr:addChild(child, index)
 	if not LowerClass.is(child, Badr) then return self end
 
-	self:addChild(child, index)
+	TreeMixin.addChild(self, child, index)
 
 	self:updatePosition(self.x, self.y)
 	return self
 end
 
-Badr.__add = Badr.add
+Badr.__add = Badr.addChild
 
 
-function Badr:sub(component)
+function Badr:removeChild(component)
 	if not LowerClass.is(component, Badr) then return self end
 
-	self:removeChild(component)
+	TreeMixin.removeChild(self, component)
 
 	self:updatePosition(self.x, self.y)
 
 	return self
 end
 
-Badr.__sub = Badr.sub
+Badr.__sub = Badr.removeChild
 
 ---Ensures a component has it's position updated
 ---@param x any
